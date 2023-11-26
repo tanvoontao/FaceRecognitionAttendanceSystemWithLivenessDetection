@@ -9,7 +9,7 @@ from tensorflow.keras import layers, metrics
 from tensorflow.keras.applications import resnet
 
 
-MODEL_DIR = 'models/siamese_model-final2'  
+MODEL_DIR = 'models/siamese_model-final'  
 VERIF_IMGS_DIR = 'registered_images'
 INPUT_IMG_DIR = 'input_images/face.png'
 THRESHOLD = 0.5
@@ -17,8 +17,6 @@ VERIFICATION_THRESHOLD = 0.5
 
 # Load the model
 siamese_model = tf.keras.models.load_model(MODEL_DIR)
-
-# siamese_model.summary()
 
 def get_encoder(input_shape):
     """ Returns the image encoding model """
@@ -54,8 +52,6 @@ def extract_encoder(model):
         i+=1
     return encoder
 
-encoder = extract_encoder(siamese_model)
-
 def read_image_pairs(image_pairs):
     pair_images = []
     for pair in image_pairs:  # Read only the first 100 pairs
@@ -74,11 +70,6 @@ def read_image_pairs(image_pairs):
         pair_images.append((image1, image2))
     return pair_images
 
-# img_path = 'input_images/face.png'
-# img_path2 = 'input_images/face2.png'
-
-# img_pairs = read_image_pairs([(img_path, img_path2)])
-
 def compute_cosine_similarity(encoder, image_pairs):
     similarities = []
 
@@ -92,9 +83,8 @@ def compute_cosine_similarity(encoder, image_pairs):
         similarity = cosine_similarity(encoding1, encoding2)[0][0]
         similarities.append(similarity)
 
-    return similarities
-        
-        
+    return similarities    
+
 def load_images(full_path):
     image_pairs = []
 
@@ -110,22 +100,18 @@ def verify_user(encoder):
     users = []
     
     for entry in ENTRIES:
-        total_images_count = 0
         current_user = entry
 
         full_path = os.path.join(VERIF_IMGS_DIR, entry)
         # eg, registered_images\voonTao
         
         img_pairs = read_image_pairs(load_images(full_path))
-        # total_images_count += 2 * len(img_pairs)
 
         similarities = compute_cosine_similarity(encoder, img_pairs)
-
-        # print(similarities)
+        
         predictions = [1 if sim > THRESHOLD else 0 for sim in similarities]
 
         similar_pairs_count = sum(predictions)
-
 
         similarity = similar_pairs_count / len(img_pairs) if img_pairs else 0
 
@@ -140,14 +126,13 @@ def verify_user(encoder):
 
     username = possible_user['username']
     similarity = possible_user['similarity']
-    
 
     if (similarity > VERIFICATION_THRESHOLD):
         return username, similarity
     else:
         return None, None
 
-verify_user(encoder)
+encoder = extract_encoder(siamese_model)
 
-# similarities = compute_cosine_similarity(encoder, img_pairs)
-# print(similarities)
+username, similarity = verify_user(encoder)
+print(username, similarity)
