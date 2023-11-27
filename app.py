@@ -17,12 +17,14 @@ from tensorflow.keras.applications import resnet
 
 import threading
 
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
 face_detected = False
 current_frame = None
 FRAME_INTERVAL_MS = 20
 last_real_face_time = None
 latest_face_coords = None
-registering = False
+registering = True
 taking_attendance = True
 registered_username = None
 
@@ -482,7 +484,7 @@ name_entry = tk.Entry(frame_right, font=entry_font, bg="#ffffff", borderwidth=2)
 register_btn = tk.Button(frame_right, text="Register", command=on_register, font=button_font, bg=button_color, fg="#ffffff")
 
 # Initialize camera
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(1)
 
 # Start the update process for the camera
 update_frame()
