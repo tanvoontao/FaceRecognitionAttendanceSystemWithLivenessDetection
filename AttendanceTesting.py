@@ -364,6 +364,8 @@ def update_verification_result(username, similarity):
     if username is not None:
         set_instruction_text(f"You are verified! Welcome, {username}")
         hide_button()
+        # Call the function to take attendance and record it
+        take_attendance_and_record()
     else:
         set_instruction_text("Not verified. Please register.")
         show_register_ui()
@@ -373,28 +375,32 @@ def verify_user_thread():
     verify_user(ENCODER, update_verification_result)
 
 def take_attendance_and_record():
-    global registered_username
+    global username  # Use the same variable name as in verify_user
 
-    if registered_username is not None:
-        # Get the current date
-        current_date = time.strftime('%Y-%m-%d')
+    if username is not None:
+        try:
+            # Get the current date
+            current_date = time.strftime('%Y-%m-%d')
 
-        # Open or create the Excel file
-        if os.path.exists(ATTENDANCE_FILE):
-            df = pd.read_excel(ATTENDANCE_FILE)
-        else:
-            df = pd.DataFrame(columns=['Name', 'Date'])
+            # Open or create the Excel file
+            if os.path.exists(ATTENDANCE_FILE):
+                df = pd.read_excel(ATTENDANCE_FILE)
+            else:
+                df = pd.DataFrame(columns=['Name', 'Date'])
 
-        # Check if the user's name is already in the attendance file
-        if registered_username not in df['Name'].values:
-            # Add a new attendance record
-            df = df.append({'Name': registered_username, 'Date': current_date}, ignore_index=True)
+            # Check if the user's name is already in the attendance file
+            if username not in df['Name'].values:
+                # Add a new attendance record
+                df = df.append({'Name': username, 'Date': current_date}, ignore_index=True)
 
-            # Save the updated attendance to the Excel file
-            df.to_excel(ATTENDANCE_FILE, index=False)
-            print(f"Attendance recorded for {registered_username} on {current_date}")
-        else:
-            print(f"Attendance for {registered_username} already recorded today.")
+                # Save the updated attendance to the Excel file
+                df.to_excel(ATTENDANCE_FILE, index=False)
+                print(f"Attendance recorded for {username} on {current_date}")
+            else:
+                print(f"Attendance for {username} already recorded today.")
+        except Exception as e:
+            print(f"An error occurred while writing to the Excel file: {str(e)}")
+
 
 
 def on_take_attendance():
@@ -412,10 +418,6 @@ def on_take_attendance():
 
     # Update the taking_attendance flag
     taking_attendance = False
-
-    # Call the function to take attendance and record it
-    take_attendance_and_record()
-        
 
 def show_register_ui():
     global name_entry, register_btn, registering
