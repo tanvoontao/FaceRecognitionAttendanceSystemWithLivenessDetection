@@ -176,14 +176,14 @@ ENCODER = extract_encoder(SIAMESE_MODEL)
 # seconds = 250 (num of frames) / 50 (fps) = 5 seconds
 
 # face detection model
-face_cascade = cv2.CascadeClassifier("models/face_detection.xml")
+face_cascade = cv2.CascadeClassifier("models/haarcascade_frontalface_default.xml")
 
 # anti-spoofing model
-json_file = open('models/anti_spoofing.json','r')
+json_file = open('models/antispoofing_model.json','r')
 loaded_model_json = json_file.read()
 json_file.close()
 model = model_from_json(loaded_model_json)
-model.load_weights('models/anti_spoofing.h5')
+model.load_weights('models/antispoofing_model.h5')
 
 def set_instruction_text(text):
     instruction_text.config(text=text)
@@ -484,7 +484,7 @@ name_entry = tk.Entry(frame_right, font=entry_font, bg="#ffffff", borderwidth=2)
 register_btn = tk.Button(frame_right, text="Register", command=on_register, font=button_font, bg=button_color, fg="#ffffff")
 
 # Initialize camera
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 
 # Start the update process for the camera
 update_frame()
