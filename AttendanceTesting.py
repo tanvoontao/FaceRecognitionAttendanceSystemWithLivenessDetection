@@ -38,7 +38,8 @@ VERIFICATION_THRESHOLD = 0.5
 # Define the Excel file to store attendance
 ATTENDANCE_FILE = 'attendance.xlsx'
 
-SIAMESE_MODEL = tf.keras.models.load_model(MODEL_DIR)
+main_page = True
+register_page = False
 
 def get_encoder(input_shape):
     """ Returns the image encoding model """
@@ -131,8 +132,8 @@ def verify_user(encoder, callback):
         # total_images_count += 2 * len(img_pairs)
 
         similarities = compute_cosine_similarity(encoder, img_pairs)
+        print(similarities)
 
-        # print(similarities)
         predictions = [1 if sim > THRESHOLD else 0 for sim in similarities]
 
         similar_pairs_count = sum(predictions)
@@ -142,11 +143,13 @@ def verify_user(encoder, callback):
 
         user = {
             'username': current_user,
-            'similarity': similarity
+            'similarity': similarity,
+            'total_match': f"{similar_pairs_count}/{len(img_pairs)}",
         }
 
         users.append(user)
 
+    print(users)
     possible_user = max(users, key=lambda user: user['similarity'])
 
     username = possible_user['username']
@@ -164,15 +167,8 @@ def verify_user(encoder, callback):
             print('not verified')
             callback(None, None)
 
-    # print(possible_user)
-    # if (similarity > VERIFICATION_THRESHOLD):
-    #     print('verified')
-    #     return username, similarity
-    # else:
-    #     print('not verified')
-    #     return None, None
-
-ENCODER = extract_encoder(SIAMESE_MODEL)
+# SIAMESE_MODEL = tf.keras.models.load_model(MODEL_DIR)
+# ENCODER = extract_encoder(SIAMESE_MODEL)
 
 
 
@@ -193,7 +189,6 @@ def set_instruction_text(text):
     instruction_text.config(text=text)
 
 def is_user_verified():
-    # TODO: face recognition model
     username, similarity = verify_user(ENCODER)
     if username is not None:
         return True
@@ -219,7 +214,7 @@ def capture_image():
 
         cv2.waitKey(100)
 
-def capture_and_save_images(user_name, num_images=30):
+def capture_and_save_images(user_name, num_images=3):
     global latest_face_coords
 
     if not cap.isOpened() or latest_face_coords is None:
@@ -248,7 +243,6 @@ def capture_and_save_images(user_name, num_images=30):
             # Wait a bit between captures (for example, 100 ms)
             cv2.waitKey(100)
 
-
 def update_frame():
     global current_frame, face_detected, last_real_face_time, latest_face_coords, registering
 
@@ -263,63 +257,68 @@ def update_frame():
         ret = False
 
     if ret:
-        gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+            gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-        for (x, y, w, h) in faces:
-            face = current_frame[y-5:y+h+5, x-5:x+w+5]
-            resized_face = cv2.resize(face, (160, 160))
-            resized_face = resized_face.astype("float") / 255.0
-            resized_face = np.expand_dims(resized_face, axis=0)
-            preds = model.predict(resized_face, verbose=0)[0]
-            
-            if preds <= 0.1:
-                label = 'Real'
-                color = (0, 255, 0)  # Green for real face
-                face_detected = True
-            else:
-                label = 'Spoof'
-                color = (0, 0, 255)  # Red for spoof
-                face_detected = False
+            for (x, y, w, h) in faces:
+                face = current_frame[y-5:y+h+5, x-5:x+w+5]
+                resized_face = cv2.resize(face, (160, 160))
+                resized_face = resized_face.astype("float") / 255.0
+                resized_face = np.expand_dims(resized_face, axis=0)
+                preds = model.predict(resized_face, verbose=0)[0]
+                
+                if preds <= 0.1:
+                    label = 'Real'
+                    color = (0, 255, 0)  # Green for real face
+                    face_detected = True
+                else:
+                    label = 'Spoof'
+                    color = (0, 0, 255)  # Red for spoof
+                    face_detected = False
 
-            cv2.putText(current_frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-            cv2.rectangle(current_frame, (x, y), (x + w, y + h), color, 2)
-            latest_face_coords = (x, y, w, h)
+                cv2.putText(current_frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                cv2.rectangle(current_frame, (x, y), (x + w, y + h), color, 2)
+                latest_face_coords = (x, y, w, h)
 
-        cv2image = cv2.cvtColor(current_frame, cv2.COLOR_BGR2RGB)
-        img = Image.fromarray(cv2image)
-        imgtk = ImageTk.PhotoImage(image=img)
-        label_video.imgtk = imgtk
-        label_video.configure(image=imgtk)
+            cv2image = cv2.cvtColor(current_frame, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(cv2image)
+            imgtk = ImageTk.PhotoImage(image=img)
+            label_video.imgtk = imgtk
+            label_video.configure(image=imgtk)
 
-    if taking_attendance:
-        if face_detected:
-            last_real_face_time = last_real_face_time or time.time()
-            elapsed = time.time() - last_real_face_time
-            remaining_time = max(0, 2 - int(elapsed))  # 2 seconds countdown
-
-            if elapsed < 2:
-                instruction = f"Stay in front of the camera for {remaining_time} more seconds. "
-                hide_button()
-
-                if registered_username is not None:
-                    instruction += f"\nPlease, {registered_username}!"
-                set_instruction_text(instruction)
-            else:
-                instruction = "Please click the button to take attendance. "
-                show_button()
-                if registered_username is not None:
-                    instruction += f"please, {registered_username}. "
-                set_instruction_text(instruction)
-        else:
-            last_real_face_time = None
-            hide_button()
-            set_instruction_text("No face detected. Please stay in front of the camera.")
-
-    if registering:
+    if main_page:
         pass
+    else:
+        
+
+        if taking_attendance:
+            if face_detected:
+                last_real_face_time = last_real_face_time or time.time()
+                elapsed = time.time() - last_real_face_time
+                remaining_time = max(0, 2 - int(elapsed))  # 2 seconds countdown
+
+                if elapsed < 2:
+                    instruction = f"Stay in front of the camera for {remaining_time} more seconds. "
+                    hide_button()
+
+                    if registered_username is not None:
+                        instruction += f"\nPlease, {registered_username}!"
+                    set_instruction_text(instruction)
+                else:
+                    instruction = "Please click the button to take attendance. "
+                    show_button()
+                    if registered_username is not None:
+                        instruction += f"please, {registered_username}. "
+                    set_instruction_text(instruction)
+            else:
+                last_real_face_time = None
+                hide_button()
+                set_instruction_text("No face detected. Please stay in front of the camera.")
+
+        if registering:
+            pass
+        
     
-   
     label_video.after(FRAME_INTERVAL_MS, update_frame)
         
 
@@ -332,32 +331,6 @@ def hide_button():
 def close_camera():
     if cap.isOpened():
         cap.release()
-
-# def on_take_attendance():
-#     global taking_attendance
-
-#     capture_image()
-
-#     close_camera()
-#     display_captured_image()
-
-#     username, similarity = verify_user(ENCODER)
-#     is_user_verified = False
-
-#     if username is not None:
-#         is_user_verified = True
-    
-
-#     if is_user_verified:
-#         set_instruction_text(f"You are verified! Welcome, {username}")
-#         hide_button()
-#         taking_attendance = False
-        
-#     else:
-#         reopen_camera()
-#         set_instruction_text("Not verified. Please register.")
-#         show_register_ui()
-#         taking_attendance = False
 
 def update_verification_result(username, similarity):
     # This function updates the GUI with the verification result
@@ -372,7 +345,8 @@ def update_verification_result(username, similarity):
 
 def verify_user_thread():
     # This function will be executed in a separate thread
-    verify_user(ENCODER, update_verification_result)
+    pass
+    # verify_user(ENCODER, update_verification_result)
 
 def take_attendance_and_record():
     global username  # Use the same variable name as in verify_user
@@ -471,8 +445,13 @@ def display_captured_image():
     label_video.imgtk = imgtk
     label_video.configure(image=imgtk)
 
+def show_main_page():
+    main_page_title.pack(pady=10)
+    main_page_title2.pack(pady=10)
+
 # Initialize the main window
 root = tk.Tk()
+root.geometry("1200x500")
 root.title("Face Recognition Attendance System with Liveness Detection")
 
 # Define fonts and styles
@@ -500,11 +479,17 @@ label_video = tk.Label(frame_left, bg=bg_color)
 label_video.pack(padx=10, pady=10)
 
 # Add UI elements in the right frame
-label_text = tk.Label(frame_right, text="Face Recognition Attendance System\nwith Liveness Detection", font=title_font, bg=bg_color, fg=text_color)
+TITLE = "Main Screen"
+# "Face Recognition Attendance System\nwith Liveness Detection"
+label_text = tk.Label(frame_right, text=TITLE, font=title_font, bg=bg_color, fg=text_color)
 label_text.pack(pady=10)
 
 instruction_text = tk.Label(frame_right, font=instruction_font, bg=bg_color, fg=text_color, text="Please stay in front of the camera for verification.")
-instruction_text.pack(pady=10)
+# instruction_text.pack(pady=10)
+
+# -------------------- Main Page UI -------------------- #
+main_page_title = tk.Label(frame_right, text=TITLE, font=title_font, bg=bg_color, fg=text_color)
+main_page_title2 = tk.Label(frame_right, text="uiovbfiobwef", font=title_font, bg=bg_color, fg=text_color)
 
 # ---------- Take Attendance UI ---------- #
 # Create the button but do not pack it yet
