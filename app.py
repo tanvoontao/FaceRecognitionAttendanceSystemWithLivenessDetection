@@ -328,7 +328,7 @@ def update_frame():
                 img = np.expand_dims(img, axis=0)
                 prediction = ANTI_SPOOFING_MODEL.predict(img, verbose=0)[0][0]
 
-                if prediction > 0.5:
+                if prediction >= 0.9:
                     label = 'Spoof'
                     color = (0, 0, 255)  # Red for spoof
                     face_detected = False
