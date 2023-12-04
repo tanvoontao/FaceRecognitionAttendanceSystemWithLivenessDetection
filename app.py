@@ -217,9 +217,6 @@ def verify_user(encoder, callback):
 
 
 def detect_emotion():
-    # Capture the image of the user's face after verifying identity
-    capture_image()
-
     # Perform emotion detection on the captured image
     emotion_labels = ["Angry", "Disgust", "Fear", "Happy", "Sad", "Surprise", "Neutral"]
     captured_image_path = INPUT_IMG_DIR
