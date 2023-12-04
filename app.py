@@ -182,7 +182,7 @@ def verify_user(encoder, callback):
             'avg_similarity': avg_similarity,
             'std_similarity': std_similarity,
             'min_similarity': min_similarity,
-            'total_match': f"{sum(sim > THRESHOLD for sim in similarities)}/{len(img_pairs)} \n",
+            'total_match': f"{sum(sim > THRESHOLD for sim in similarities)}/{len(img_pairs)}",
         }
 
         users.append(user)
@@ -328,7 +328,7 @@ def update_frame():
                 img = np.expand_dims(img, axis=0)
                 prediction = ANTI_SPOOFING_MODEL.predict(img, verbose=0)[0][0]
 
-                if prediction >= 0.9:
+                if prediction > 0.5:
                     label = 'Spoof'
                     color = (0, 0, 255)  # Red for spoof
                     face_detected = False
