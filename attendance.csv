@@ -3,3 +3,6 @@ Date and Time,Employee ID,Clock-In/Clock-Out Status,Facial Expression
 2023-12-04 01:41,aaa,Clock-In,Happy
 2023-12-04 01:45,Jentz,Clock-Out,Happy
 2023-12-04 01:45,grayson,Clock-In,Happy
+2023-12-04 21:58,Voon Tao,Clock-In,Fear
+2023-12-04 21:58,Voon Tao,Clock-Out,Angry
+2023-12-04 22:02,Voon Tao,Clock-In,Angry

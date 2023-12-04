@@ -1,6 +1,7 @@
 import os
 import cv2
 import tkinter as tk
+from tkinter import ttk
 from PIL import Image, ImageTk
 from tkinter import font as tkFont
 import numpy as np
@@ -18,6 +19,8 @@ from tensorflow.keras import layers, metrics
 from tensorflow.keras.applications import resnet
 
 import threading
+
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
@@ -272,11 +275,13 @@ ENCODER = extract_encoder(SIAMESE_MODEL)
 FACE_CASCADE_MODEL = cv2.CascadeClassifier("models/haarcascade_frontalface_default.xml")
 
 # anti-spoofing model
-json_file = open('models/antispoofing_model.json','r')
-loaded_model_json = json_file.read()
-json_file.close()
-ANTI_SPOOFING_MODEL = model_from_json(loaded_model_json)
-ANTI_SPOOFING_MODEL.load_weights('models/antispoofing_model.h5')
+# json_file = open('models/antispoofing_model.json','r')
+# loaded_model_json = json_file.read()
+# json_file.close()
+# ANTI_SPOOFING_MODEL = model_from_json(loaded_model_json)
+# ANTI_SPOOFING_MODEL.load_weights('models/antispoofing_model.h5')
+
+ANTI_SPOOFING_MODEL = tf.keras.models.load_model('models/test.h5')
 
 # Emotion model
 EMOTION_MODEL_PATH = 'emotion/facialemotionmodel.h5'
@@ -285,12 +290,6 @@ EMOTION_MODEL = load_model(EMOTION_MODEL_PATH)
 def set_instruction_text(text):
     global instruction_text
     instruction_text.config(text=text)
-
-def is_user_verified():
-    username, similarity = verify_user(ENCODER)
-    if username is not None:
-        return True
-    return False
 
 def capture_image():
     global latest_face_coords
@@ -360,19 +359,24 @@ def update_frame():
 
             for (x, y, w, h) in faces:
                 face = current_frame[y-5:y+h+5, x-5:x+w+5]
-                resized_face = cv2.resize(face, (160, 160))
-                resized_face = resized_face.astype("float") / 255.0
-                resized_face = np.expand_dims(resized_face, axis=0)
-                preds = ANTI_SPOOFING_MODEL.predict(resized_face, verbose=0)[0]
-                
-                if preds <= 0.5:
-                    label = 'Real'
-                    color = (0, 255, 0)  # Green for real face
-                    face_detected = True
-                else:
+
+                img = cv2.resize(face, (160, 160))
+                img = preprocess_input(img)
+                img = np.expand_dims(img, axis=0)
+                prediction = ANTI_SPOOFING_MODEL.predict(img, verbose=0)[0][0]
+
+                if prediction >= 0.9:
+                    print(prediction,"Spoof")
                     label = 'Spoof'
                     color = (0, 0, 255)  # Red for spoof
                     face_detected = False
+                else:
+                    print(prediction,"Real")
+                    label = 'Real'
+                    color = (0, 255, 0)  # Green for real face
+                    face_detected = True
+
+                print(prediction, label)
 
                 cv2.putText(current_frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
                 cv2.rectangle(current_frame, (x, y), (x + w, y + h), color, 2)
@@ -420,7 +424,7 @@ def update_verification_result(username, similarity, detected_emotion):
         set_instruction_text(f"You are verified! Welcome, {username}\n Emotion: {detected_emotion}")
         
         # Call the function to take attendance and record it
-        record_attendance(username, detect_emotion)
+        record_attendance(username, detected_emotion)
         display_user_attendance(username)
         # root.after(3000, lambda: switch_to_page("main"))
     else:
@@ -428,7 +432,6 @@ def update_verification_result(username, similarity, detected_emotion):
         # show_register_ui()
 
 def verify_user_thread():
-    print('call')
     # This function will be executed in a separate thread
     verify_user(ENCODER, update_verification_result)
 
@@ -568,18 +571,24 @@ def display_user_attendance(username):
     attendance_display_title = tk.Label(frame_right, text=f"Attendance Record for {username}", font=title_font, bg=bg_color, fg=text_color)
     attendance_display_title.pack(pady=10)
 
-    # Create a text widget to display the data
-    attendance_display = tk.Text(frame_right, height=10, width=50)
-    attendance_display.pack()
+    # Create a treeview widget as a table
+    columns = ("Date and Time", "Clock-In/Clock-Out Status", "Facial Expression")
+    attendance_table = ttk.Treeview(frame_right, columns=columns, show="headings")
+    
+    # Define the columns
+    for col in columns:
+        attendance_table.heading(col, text=col)
+        attendance_table.column(col, anchor="center")
 
-    # Inserting the filtered data into the text widget
-    for index, row in user_data.iterrows():
-        attendance_display.insert(tk.END, f"Date: {row['Date and Time']}, Status: {row['Clock-In/Clock-Out Status']}\n")
+    # Inserting the filtered data into the treeview
+    for _, row in user_data.iterrows():
+        attendance_table.insert("", tk.END, values=(row['Date and Time'], row['Clock-In/Clock-Out Status'], row['Facial Expression']))
+
+    attendance_table.pack(expand=True, fill="both", pady=10)
 
     # Add a back button to return to the main page
     back_btn = tk.Button(frame_right, text="Back to Main", command=lambda: switch_to_page("main"), font=button_font, bg=button_color, fg="white")
     back_btn.pack(pady=10)
-
 
 # Initialize the main window
 root = tk.Tk()
