@@ -1,6 +1,7 @@
 import os
 import cv2
 import tkinter as tk
+from tkinter import ttk
 from PIL import Image, ImageTk
 from tkinter import font as tkFont
 import numpy as np
@@ -8,7 +9,7 @@ import time
 import threading
 import pandas as pd
 
-from tensorflow.keras.models import model_from_json
+from tensorflow.keras.models import model_from_json, load_model
 
 import tensorflow as tf
 from tensorflow.keras.applications.resnet import preprocess_input
@@ -18,6 +19,8 @@ from tensorflow.keras import layers, metrics
 from tensorflow.keras.applications import resnet
 
 import threading
+
+from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
@@ -32,8 +35,8 @@ registered_username = None
 MODEL_DIR = 'models/siamese_model-final'  
 VERIF_IMGS_DIR = 'registered_images'
 INPUT_IMG_DIR = 'input_images/face.png'
-THRESHOLD = 0.3
-VERIFICATION_THRESHOLD = 0.5
+THRESHOLD = 0.2
+VERIFICATION_THRESHOLD = 0.3
 # Define the Excel file to store attendance
 ATTENDANCE_FILE = 'attendance.csv'
 import csv
@@ -74,8 +77,6 @@ def record_attendance(username, facial_expression):
     with open(ATTENDANCE_FILE, mode='a', newline='') as file:
         writer = csv.writer(file)
 
-        print([current_time, username, new_status, facial_expression])
-        
         writer.writerow([current_time, username, new_status, facial_expression])
 
 
@@ -168,7 +169,6 @@ def verify_user(encoder, callback):
         # eg, registered_images\voonTao
         
         img_pairs = read_image_pairs(load_images(full_path))
-        # total_images_count += 2 * len(img_pairs)
 
         similarities = compute_cosine_similarity(encoder, img_pairs)
         print(similarities)
@@ -177,24 +177,12 @@ def verify_user(encoder, callback):
         std_similarity = np.std(similarities)
         min_similarity = min(similarities)
 
-        # predictions = [1 if sim > THRESHOLD else 0 for sim in similarities]
-
-        # similar_pairs_count = sum(predictions)
-
-        # similarity = total_match / total_imgs
-        # similarity = similar_pairs_count / len(img_pairs) if img_pairs else 0
-
-        # user = {
-        #     'username': current_user,
-        #     'similarity': similarity,
-        #     'total_match': f"{similar_pairs_count}/{len(img_pairs)}",
-        # }
         user = {
             'username': current_user,
             'avg_similarity': avg_similarity,
             'std_similarity': std_similarity,
             'min_similarity': min_similarity,
-            'total_match': f"{sum(sim > THRESHOLD for sim in similarities)}/{len(img_pairs)}",
+            'total_match': f"{sum(sim > THRESHOLD for sim in similarities)}/{len(img_pairs)} \n",
         }
 
         users.append(user)
@@ -217,25 +205,38 @@ def verify_user(encoder, callback):
         if callback:
             if top_user['avg_similarity'] > VERIFICATION_THRESHOLD:
                 print('verified')
-                callback(top_user['username'], top_user['avg_similarity'])
+
+                detected_emotion = detect_emotion()
+                callback(top_user['username'], top_user['avg_similarity'], detected_emotion)
             else:
                 print('not verified')
-                callback(None, None)
+                callback(None, None, None)
     else:
         print('not verified')
-        callback(None, None)
+        callback(None, None, None)
 
 
-    # username = possible_user['username']
-    # similarity = possible_user['similarity']
+def detect_emotion():
+    # Capture the image of the user's face after verifying identity
+    capture_image()
 
-    # if callback:
-    #     if (similarity > VERIFICATION_THRESHOLD):
-    #         print('verified')
-    #         callback(username, similarity)
-    #     else:
-    #         print('not verified')
-    #         callback(None, None)
+    # Perform emotion detection on the captured image
+    emotion_labels = ["Angry", "Disgust", "Fear", "Happy", "Sad", "Surprise", "Neutral"]
+    captured_image_path = INPUT_IMG_DIR
+
+    # Load and preprocess the captured image
+    captured_image = cv2.imread(captured_image_path)
+    captured_image = cv2.cvtColor(captured_image, cv2.COLOR_BGR2GRAY)
+    captured_image = cv2.resize(captured_image, (48, 48))
+    captured_image = np.reshape(captured_image, (1, 48, 48, 1))
+
+    # Predict emotion
+    emotion_prediction = EMOTION_MODEL(captured_image)
+    detected_emotion_index = np.argmax(emotion_prediction)
+    detected_emotion = emotion_labels[detected_emotion_index]
+
+    return detected_emotion
+
 
 SIAMESE_MODEL = tf.keras.models.load_model(MODEL_DIR)
 ENCODER = extract_encoder(SIAMESE_MODEL)
@@ -246,22 +247,15 @@ ENCODER = extract_encoder(SIAMESE_MODEL)
 # face detection model
 FACE_CASCADE_MODEL = cv2.CascadeClassifier("models/haarcascade_frontalface_default.xml")
 
-# anti-spoofing model
-json_file = open('models/antispoofing_model.json','r')
-loaded_model_json = json_file.read()
-json_file.close()
-ANTI_SPOOFING_MODEL = model_from_json(loaded_model_json)
-ANTI_SPOOFING_MODEL.load_weights('models/antispoofing_model.h5')
+ANTI_SPOOFING_MODEL = tf.keras.models.load_model('models/antispoofing.h5')
+
+# Emotion model
+EMOTION_MODEL_PATH = 'models/facialemotionmodel.h5'
+EMOTION_MODEL = load_model(EMOTION_MODEL_PATH)
 
 def set_instruction_text(text):
     global instruction_text
     instruction_text.config(text=text)
-
-def is_user_verified():
-    username, similarity = verify_user(ENCODER)
-    if username is not None:
-        return True
-    return False
 
 def capture_image():
     global latest_face_coords
@@ -331,19 +325,22 @@ def update_frame():
 
             for (x, y, w, h) in faces:
                 face = current_frame[y-5:y+h+5, x-5:x+w+5]
-                resized_face = cv2.resize(face, (160, 160))
-                resized_face = resized_face.astype("float") / 255.0
-                resized_face = np.expand_dims(resized_face, axis=0)
-                preds = ANTI_SPOOFING_MODEL.predict(resized_face, verbose=0)[0]
-                
-                if preds <= 0.5:
-                    label = 'Real'
-                    color = (0, 255, 0)  # Green for real face
-                    face_detected = True
-                else:
+
+                img = cv2.resize(face, (160, 160))
+                img = preprocess_input(img)
+                img = np.expand_dims(img, axis=0)
+                prediction = ANTI_SPOOFING_MODEL.predict(img, verbose=0)[0][0]
+
+                if prediction >= 0.9:
                     label = 'Spoof'
                     color = (0, 0, 255)  # Red for spoof
                     face_detected = False
+                else:
+                    label = 'Real'
+                    color = (0, 255, 0)  # Green for real face
+                    face_detected = True
+
+                print(prediction, label)
 
                 cv2.putText(current_frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
                 cv2.rectangle(current_frame, (x, y), (x + w, y + h), color, 2)
@@ -385,13 +382,13 @@ def close_camera():
     if cap.isOpened():
         cap.release()
 
-def update_verification_result(username, similarity):
+def update_verification_result(username, similarity, detected_emotion):
     # This function updates the GUI with the verification result
     if username is not None:
-        set_instruction_text(f"You are verified! Welcome, {username}")
+        set_instruction_text(f"You are verified! Welcome, {username}\n Emotion: {detected_emotion}")
         
         # Call the function to take attendance and record it
-        record_attendance(username, 'Happy')
+        record_attendance(username, detected_emotion)
         display_user_attendance(username)
         # root.after(3000, lambda: switch_to_page("main"))
     else:
@@ -399,7 +396,6 @@ def update_verification_result(username, similarity):
         # show_register_ui()
 
 def verify_user_thread():
-    print('call')
     # This function will be executed in a separate thread
     verify_user(ENCODER, update_verification_result)
 
@@ -539,18 +535,34 @@ def display_user_attendance(username):
     attendance_display_title = tk.Label(frame_right, text=f"Attendance Record for {username}", font=title_font, bg=bg_color, fg=text_color)
     attendance_display_title.pack(pady=10)
 
-    # Create a text widget to display the data
-    attendance_display = tk.Text(frame_right, height=10, width=50)
-    attendance_display.pack()
+    # Create a treeview widget as a table
+    columns = ("Date and Time", "Clock-In/Clock-Out Status", "Facial Expression")
+    attendance_table = ttk.Treeview(frame_right, columns=columns, show="headings")
+    
+    # Define the columns
+    for col in columns:
+        attendance_table.heading(col, text=col)
+        attendance_table.column(col, anchor="center", width=100, stretch=tk.YES)
 
-    # Inserting the filtered data into the text widget
-    for index, row in user_data.iterrows():
-        attendance_display.insert(tk.END, f"Date: {row['Date and Time']}, Status: {row['Clock-In/Clock-Out Status']}\n")
+    # Inserting the filtered data into the treeview
+    for _, row in user_data.iterrows():
+        attendance_table.insert("", tk.END, values=(row['Date and Time'], row['Clock-In/Clock-Out Status'], row['Facial Expression']))
+
+    # Add scrollbars
+    vertical_scrollbar = ttk.Scrollbar(frame_right, orient="vertical", command=attendance_table.yview)
+    vertical_scrollbar.pack(side="right", fill="y")
+    attendance_table.configure(yscrollcommand=vertical_scrollbar.set)
+
+    horizontal_scrollbar = ttk.Scrollbar(frame_right, orient="horizontal", command=attendance_table.xview)
+    horizontal_scrollbar.pack(side="bottom", fill="x")
+    attendance_table.configure(xscrollcommand=horizontal_scrollbar.set)
+
+    # Pack the table with controlled expansion
+    attendance_table.pack(expand=False, fill="both", pady=10)
 
     # Add a back button to return to the main page
     back_btn = tk.Button(frame_right, text="Back to Main", command=lambda: switch_to_page("main"), font=button_font, bg=button_color, fg="white")
     back_btn.pack(pady=10)
-
 
 # Initialize the main window
 root = tk.Tk()
