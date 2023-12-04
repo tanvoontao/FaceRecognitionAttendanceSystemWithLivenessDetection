@@ -32,7 +32,7 @@ registered_username = None
 MODEL_DIR = 'models/siamese_model-final'  
 VERIF_IMGS_DIR = 'registered_images'
 INPUT_IMG_DIR = 'input_images/face.png'
-THRESHOLD = 0.4
+THRESHOLD = 0.3
 VERIFICATION_THRESHOLD = 0.5
 # Define the Excel file to store attendance
 ATTENDANCE_FILE = 'attendance.csv'
@@ -336,7 +336,7 @@ def update_frame():
                 resized_face = np.expand_dims(resized_face, axis=0)
                 preds = ANTI_SPOOFING_MODEL.predict(resized_face, verbose=0)[0]
                 
-                if preds <= 0.1:
+                if preds <= 0.5:
                     label = 'Real'
                     color = (0, 255, 0)  # Green for real face
                     face_detected = True
