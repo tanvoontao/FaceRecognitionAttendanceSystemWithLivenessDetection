@@ -33,7 +33,7 @@ MODEL_DIR = 'models/siamese_model-final'
 VERIF_IMGS_DIR = 'registered_images'
 INPUT_IMG_DIR = 'input_images/face.png'
 THRESHOLD = 0.2
-VERIFICATION_THRESHOLD = 0.5
+VERIFICATION_THRESHOLD = 0.3
 # Define the Excel file to store attendance
 ATTENDANCE_FILE = 'attendance.csv'
 import csv
@@ -194,7 +194,7 @@ def verify_user(encoder, callback):
             'avg_similarity': avg_similarity,
             'std_similarity': std_similarity,
             'min_similarity': min_similarity,
-            'total_match': f"{sum(sim > THRESHOLD for sim in similarities)}/{len(img_pairs)}",
+            'total_match': f"{sum(sim > THRESHOLD for sim in similarities)}/{len(img_pairs)} \n",
         }
 
         users.append(user)
@@ -417,12 +417,10 @@ def close_camera():
 def update_verification_result(username, similarity, detected_emotion):
     # This function updates the GUI with the verification result
     if username is not None:
-        set_instruction_text(f"You are verified! Welcome, {username}")
-        if detected_emotion:
-            set_instruction_text(f"Emotion Detected: {detected_emotion}")
+        set_instruction_text(f"You are verified! Welcome, {username}\n Emotion: {detected_emotion}")
         
         # Call the function to take attendance and record it
-        record_attendance(username, 'Happy')
+        record_attendance(username, detect_emotion)
         display_user_attendance(username)
         # root.after(3000, lambda: switch_to_page("main"))
     else:
