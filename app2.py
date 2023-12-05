@@ -293,7 +293,10 @@ EMOTION_MODEL_PATH = 'models/facialemotionmodel.h5'
 EMOTION_MODEL = load_model(EMOTION_MODEL_PATH)
 
 def detect_blink(frame):
-    global current_frame
+    global current_frame, face_detected
+    if not face_detected:
+        return False
+    
     gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
     faces,_,_ = DETECTOR.run(image = gray, upsample_num_times = 0, adjust_threshold = 0.0)
     landmarks = PREDICTOR(frame, faces[0])
