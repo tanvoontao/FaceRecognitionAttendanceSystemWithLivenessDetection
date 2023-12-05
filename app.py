@@ -24,7 +24,49 @@ import threading
 
 from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 
+import csv
+from datetime import datetime
+
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
+blink_detected = False
+
+# ---------- blinking threshold ---------- #
+BLINK_RATIO_THRESHOLD = 5.7
+left_eye_landmarks  = [36, 37, 38, 39, 40, 41]
+right_eye_landmarks = [42, 43, 44, 45, 46, 47]
+
+DETECTOR = dlib.get_frontal_face_detector()
+PREDICTOR = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
+
+# ---------- blinking detect function ---------- #
+def midpoint(point1 ,point2):
+    return (point1.x + point2.x)/2,(point1.y + point2.y)/2
+
+def euclidean_distance(point1 , point2):
+    return math.sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2)
+
+def get_blink_ratio(eye_points, facial_landmarks):
+    
+    #loading all the required points
+    corner_left  = (facial_landmarks.part(eye_points[0]).x, 
+                    facial_landmarks.part(eye_points[0]).y)
+    corner_right = (facial_landmarks.part(eye_points[3]).x, 
+                    facial_landmarks.part(eye_points[3]).y)
+    
+    center_top    = midpoint(facial_landmarks.part(eye_points[1]), 
+                             facial_landmarks.part(eye_points[2]))
+    center_bottom = midpoint(facial_landmarks.part(eye_points[5]), 
+                             facial_landmarks.part(eye_points[4]))
+
+    #calculating distance
+    horizontal_length = euclidean_distance(corner_left,corner_right)
+    vertical_length = euclidean_distance(center_top,center_bottom)
+
+    ratio = horizontal_length / vertical_length
+
+    return ratio
+
 
 face_detected = False
 current_frame = None
@@ -41,8 +83,9 @@ THRESHOLD = 0.2
 VERIFICATION_THRESHOLD = 0.3
 # Define the Excel file to store attendance
 ATTENDANCE_FILE = 'attendance.csv'
-import csv
-from datetime import datetime
+
+blink_warning_shown = False
+
 
 current_page = "main"
 name_entry = None
@@ -249,6 +292,42 @@ ANTI_SPOOFING_MODEL = tf.keras.models.load_model('models/antispoofing.h5')
 EMOTION_MODEL_PATH = 'models/facialemotionmodel.h5'
 EMOTION_MODEL = load_model(EMOTION_MODEL_PATH)
 
+def detect_blink(frame):
+    global current_frame, face_detected
+    if not face_detected:
+        return False
+
+    gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
+    faces,_,_ = DETECTOR.run(image = gray, upsample_num_times = 0, adjust_threshold = 0.0)
+    if len(faces) == 0:
+        return False
+    
+    landmarks = PREDICTOR(frame, faces[0])
+
+    #-----Step 5: Calculating blink ratio for one eye-----
+    left_eye_ratio  = get_blink_ratio(left_eye_landmarks, landmarks)
+    right_eye_ratio = get_blink_ratio(right_eye_landmarks, landmarks)
+    blink_ratio     = (left_eye_ratio + right_eye_ratio) / 2
+
+    if blink_ratio > BLINK_RATIO_THRESHOLD:
+        cv2.putText(current_frame,"BLINKING",(10,50), cv2.FONT_HERSHEY_SIMPLEX,
+            2,(255,255,255),2,cv2.LINE_AA)
+        return True
+    return False
+    
+
+def blinking_detection_thread():
+    global face_detected, blink_detected
+    start_time = time.time()
+    while time.time() - start_time < 5:  # Run for 5 seconds
+        if face_detected:
+            # Assuming you have a function `detect_blink` that returns True if a blink is detected
+            if detect_blink(current_frame):  
+                print('blink!')
+                blink_detected = True
+                break
+        time.sleep(0.1) 
+
 def set_instruction_text(text):
     global instruction_text
     instruction_text.config(text=text)
@@ -302,8 +381,21 @@ def capture_and_save_images(user_name, num_images=3):
             # Wait a bit between captures (for example, 100 ms)
             cv2.waitKey(100)
 
+def reset_alert():
+    global blink_detected, blink_warning_shown, countdown_start_time
+    blink_detected = False
+    blink_warning_shown = False
+    countdown_start_time = None
+    print('call')
+
+def display_temporary_message(temp_message, duration):
+    global blink_detected, blink_warning_shown
+    set_instruction_text(temp_message)
+    # threading.Timer(duration, lambda: set_instruction_text(default_message)).start()
+    threading.Timer(duration, reset_alert).start()
+
 def update_frame():
-    global current_frame, face_detected, latest_face_coords, countdown_start_time, attendance_confirmed
+    global current_frame, face_detected, latest_face_coords, countdown_start_time, attendance_confirmed, blink_detected, blink_warning_shown
 
     face_detected = False
 
@@ -318,29 +410,30 @@ def update_frame():
     if ret:
             gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
             faces = FACE_CASCADE_MODEL.detectMultiScale(gray, 1.3, 5)
+            if len(faces) > 0:
 
-            for (x, y, w, h) in faces:
-                face = current_frame[y-5:y+h+5, x-5:x+w+5]
+                for (x, y, w, h) in faces:
+                    face = current_frame[y-5:y+h+5, x-5:x+w+5]
 
-                img = cv2.resize(face, (160, 160))
-                img = preprocess_input(img)
-                img = np.expand_dims(img, axis=0)
-                prediction = ANTI_SPOOFING_MODEL.predict(img, verbose=0)[0][0]
+                    img = cv2.resize(face, (160, 160))
+                    img = preprocess_input(img)
+                    img = np.expand_dims(img, axis=0)
+                    prediction = ANTI_SPOOFING_MODEL.predict(img, verbose=0)[0][0]
 
-                if prediction >= 0.9:
-                    label = 'Spoof'
-                    color = (0, 0, 255)  # Red for spoof
-                    face_detected = False
-                else:
-                    label = 'Real'
-                    color = (0, 255, 0)  # Green for real face
-                    face_detected = True
+                    if prediction >= 0.9:
+                        label = 'Spoof'
+                        color = (0, 0, 255)  # Red for spoof
+                        face_detected = False
+                    else:
+                        label = 'Real'
+                        color = (0, 255, 0)  # Green for real face
+                        face_detected = True
 
-                print(prediction, label)
+                    # print(prediction, label)
 
-                cv2.putText(current_frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-                cv2.rectangle(current_frame, (x, y), (x + w, y + h), color, 2)
-                latest_face_coords = (x, y, w, h)
+                    cv2.putText(current_frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    cv2.rectangle(current_frame, (x, y), (x + w, y + h), color, 2)
+                    latest_face_coords = (x, y, w, h)
 
             cv2image = cv2.cvtColor(current_frame, cv2.COLOR_BGR2RGB)
             img = Image.fromarray(cv2image)
@@ -357,20 +450,36 @@ def update_frame():
             if face_detected:
                 if countdown_start_time is None:
                     countdown_start_time = time.time()
+                    blink_warning_shown = False
+                    blink_detected = False
+                    threading.Thread(target=blinking_detection_thread).start()
                 
                 elapsed_time = time.time() - countdown_start_time
                 remaining_time = max(0, countdown_duration - int(elapsed_time))
-                set_instruction_text(f"Please hold for {remaining_time} more seconds.")
+                # set_instruction_text(f"Please hold for {remaining_time} more seconds.")
 
-                if remaining_time <= 0:
+                # if remaining_time <= 0 and blink_detected:
+                #     set_instruction_text("Face verified. Please confirm your attendance.")
+                #     show_attendance_confirmation_button()
+                # elif remaining_time <= 0 and not blink_detected:
+                #     set_instruction_text("You didn't not blinking! Are you spoof!")
+                #     countdown_start_time = None
+                #     blink_detected = False
+                #     hide_attendance_confirmation_button()
+
+                print(f'w: {blink_warning_shown}, blink:  {blink_detected}')
+                if remaining_time <= 0 and blink_detected:
                     set_instruction_text("Face verified. Please confirm your attendance.")
                     show_attendance_confirmation_button()
+                elif remaining_time <= 0 and not blink_detected and not blink_warning_shown:
+                    blink_warning_shown = True
+                    display_temporary_message("You didn't blink! Are you a spoof?", 3)
+                elif not blink_warning_shown:
+                    set_instruction_text(f"Please hold for {remaining_time} more seconds.")
             else:
                 countdown_start_time = None
                 hide_attendance_confirmation_button()
                 set_instruction_text("No face detected or fake face.")
-
-        pass
         
     label_video.after(FRAME_INTERVAL_MS, update_frame)
    
@@ -379,6 +488,8 @@ def close_camera():
         cap.release()
 
 def update_verification_result(username, similarity, detected_emotion):
+    global blink_detected
+    blink_detected = False
     # This function updates the GUI with the verification result
     if username is not None:
         set_instruction_text(f"You are verified! Welcome, {username}\n Emotion: {detected_emotion}")
@@ -393,6 +504,7 @@ def update_verification_result(username, similarity, detected_emotion):
 
 def verify_user_thread():
     # This function will be executed in a separate thread
+    # pass
     verify_user(ENCODER, update_verification_result)
 
 def on_take_attendance():
