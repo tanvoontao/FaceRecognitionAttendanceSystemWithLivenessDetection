@@ -293,6 +293,7 @@ EMOTION_MODEL_PATH = 'models/facialemotionmodel.h5'
 EMOTION_MODEL = load_model(EMOTION_MODEL_PATH)
 
 def detect_blink(frame):
+    global current_frame
     gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
     faces,_,_ = DETECTOR.run(image = gray, upsample_num_times = 0, adjust_threshold = 0.0)
     landmarks = PREDICTOR(frame, faces[0])
@@ -303,6 +304,8 @@ def detect_blink(frame):
     blink_ratio     = (left_eye_ratio + right_eye_ratio) / 2
 
     if blink_ratio > BLINK_RATIO_THRESHOLD:
+        cv2.putText(current_frame,"BLINKING",(10,50), cv2.FONT_HERSHEY_SIMPLEX,
+            2,(255,255,255),2,cv2.LINE_AA)
         return True
     return False
     
