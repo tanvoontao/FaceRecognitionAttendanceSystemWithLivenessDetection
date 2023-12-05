@@ -1,8 +1,16 @@
+# resolve dlib cant install on windows
+# https://youtu.be/9zeb902f98s?si=m0vwApue47GjCAB4
+
+
+
 #-----Step 1: Use VideoCapture in openCV-----
 import cv2
 import dlib
 import math
-BLINK_RATIO_THRESHOLD = 5.7
+# BLINK_RATIO_THRESHOLD = 5.7
+BLINK_RATIO_THRESHOLD = 3.3
+
+FACE_CASCADE_MODEL = cv2.CascadeClassifier("models/haarcascade_frontalface_default.xml")
 
 #-----Step 5: Getting to know blink ratio
 
@@ -65,22 +73,39 @@ while True:
 
     #-----Step 3: Face detection with dlib-----
     #detecting faces in the frame 
-    faces,_,_ = detector.run(image = frame, upsample_num_times = 0, adjust_threshold = 0.0)
-
+    # faces,_,_ = detector.run(image = frame, upsample_num_times = 0, adjust_threshold = 0.0)
+    # faces -> rectangles[[(211, 95) (360, 244)]]
+    faces = FACE_CASCADE_MODEL.detectMultiScale(frame, 1.3, 5)
+    # for (x, y, w, h) in faces:
+    # print(faces)
+    # print('----------------')
     #-----Step 4: Detecting Eyes using landmarks in dlib-----
-    for face in faces:
-        
-        landmarks = predictor(frame, face)
+    
+    # for face in faces:
+    for (x, y, w, h) in faces:
+        # cropped_frame = frame[face.top():face.bottom(), face.left():face.right()]
+        cropped_frame = frame[y:y+h, x:x+w]
+        cv2.imwrite(f'./1.png', cropped_frame)
+    
+        face_rect = dlib.rectangle(left = x, top = y, right = x + w, bottom = y + h)
+        # print(face_rect)
+        # landmarks = predictor(frame, face)
+        landmarks = predictor(frame, face_rect)
 
         #-----Step 5: Calculating blink ratio for one eye-----
         left_eye_ratio  = get_blink_ratio(left_eye_landmarks, landmarks)
         right_eye_ratio = get_blink_ratio(right_eye_landmarks, landmarks)
         blink_ratio     = (left_eye_ratio + right_eye_ratio) / 2
 
+        
         if blink_ratio > BLINK_RATIO_THRESHOLD:
+            print(blink_ratio, 'blinked')
             #Blink detected! Do Something!
             cv2.putText(frame,"BLINKING",(10,50), cv2.FONT_HERSHEY_SIMPLEX,
             2,(255,255,255),2,cv2.LINE_AA)
+        else:
+            print(blink_ratio, 'not')
+
 
 
     cv2.imshow('BlinkDetector', frame)
