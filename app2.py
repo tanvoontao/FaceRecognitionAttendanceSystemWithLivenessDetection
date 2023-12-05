@@ -484,6 +484,8 @@ def close_camera():
         cap.release()
 
 def update_verification_result(username, similarity, detected_emotion):
+    global blink_detected
+    blink_detected = False
     # This function updates the GUI with the verification result
     if username is not None:
         set_instruction_text(f"You are verified! Welcome, {username}\n Emotion: {detected_emotion}")
