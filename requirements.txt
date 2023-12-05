@@ -1,5 +1,7 @@
 opencv-python
-Pillow
 numpy
+pandas
+Pillow
+dlib
 tensorflow
 scikit-learn
