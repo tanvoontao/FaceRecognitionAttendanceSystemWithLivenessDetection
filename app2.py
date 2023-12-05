@@ -451,6 +451,7 @@ def update_frame():
                 if countdown_start_time is None:
                     countdown_start_time = time.time()
                     blink_warning_shown = False
+                    blink_detected = False
                     threading.Thread(target=blinking_detection_thread).start()
                 
                 elapsed_time = time.time() - countdown_start_time
