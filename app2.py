@@ -296,9 +296,12 @@ def detect_blink(frame):
     global current_frame, face_detected
     if not face_detected:
         return False
-    
+
     gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
     faces,_,_ = DETECTOR.run(image = gray, upsample_num_times = 0, adjust_threshold = 0.0)
+    if len(faces) == 0:
+        return False
+    
     landmarks = PREDICTOR(frame, faces[0])
 
     #-----Step 5: Calculating blink ratio for one eye-----
