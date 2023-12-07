@@ -190,7 +190,7 @@ for layer in base_model.layers[:fine_tune_at]:
 
 base_model.compile(
     optimizer=Adam(
-        learning_rate=0.000005,
+        learning_rate=0.0000005,
         beta_1=0.9,
         beta_2=0.999,
         epsilon=1e-07
