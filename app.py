@@ -30,6 +30,7 @@ from datetime import datetime
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 blink_detected = False
+CAM_NUM = 1
 
 # ---------- blinking threshold ---------- #
 BLINK_RATIO_THRESHOLD = 5.7
@@ -79,8 +80,8 @@ registered_username = None
 MODEL_DIR = 'models/siamese_model-final'  
 VERIF_IMGS_DIR = 'registered_images'
 INPUT_IMG_DIR = 'input_images/face.png'
-THRESHOLD = 0.2
-VERIFICATION_THRESHOLD = 0.3
+THRESHOLD = 0.9
+VERIFICATION_THRESHOLD = 0.93
 # Define the Excel file to store attendance
 ATTENDANCE_FILE = 'attendance.csv'
 
@@ -228,13 +229,20 @@ def verify_user(encoder, callback):
             'total_match': f"{sum(sim > THRESHOLD for sim in similarities)}/{len(img_pairs)}",
         }
 
+        print('---sum---')
+        print(sum(sim > THRESHOLD for sim in similarities))
+
         users.append(user)
 
+    print('--------------- all users ---------------')
     print(users)
     # possible_user = max(users, key=lambda user: user['similarity'])
 
     # Filter and sort users based on avg_similarity and std_similarity
     verified_users = [user for user in users if user['min_similarity'] > THRESHOLD]
+
+    print('-----------verified_users-----------')
+    print(verified_users)
 
     # Users with higher average similarity scores will be considered "greater" in the sorting order.
     # lower standard deviation is preferred because it indicates more consistent similarity scores across all image pairs.
@@ -340,7 +348,7 @@ def capture_image():
     x, y, w, h = latest_face_coords
 
     if ret:
-        cropped_frame = frame[y:y+h, x:x+w]
+        # cropped_frame = frame[y:y+h, x:x+w]
 
         directory = f'input_images'
 
@@ -348,11 +356,11 @@ def capture_image():
             os.makedirs(directory)
 
         image_path = f'{directory}/face.png'
-        cv2.imwrite(image_path, cropped_frame)
+        cv2.imwrite(image_path, frame)
 
         cv2.waitKey(100)
 
-def capture_and_save_images(user_name, num_images=3):
+def capture_and_save_images(user_name, num_images=30):
     global latest_face_coords
 
     if not cap.isOpened() or latest_face_coords is None:
@@ -364,7 +372,7 @@ def capture_and_save_images(user_name, num_images=3):
         ret, frame = cap.read()
         
         if ret:
-            cropped_frame = frame[y:y+h, x:x+w]
+            # cropped_frame = frame[y:y+h, x:x+w]
 
             # Create directory for user if it doesn't exist
             directory = f'registered_images/{user_name}'
@@ -373,7 +381,7 @@ def capture_and_save_images(user_name, num_images=3):
 
             # Save image
             image_path = f'{directory}/image_{i+1}.png'
-            cv2.imwrite(image_path, cropped_frame)
+            cv2.imwrite(image_path, frame)
 
             # Optionally, display each captured image in the GUI (this can be slow)
             # display_captured_image(image_path)
@@ -420,7 +428,7 @@ def update_frame():
                     img = np.expand_dims(img, axis=0)
                     prediction = ANTI_SPOOFING_MODEL.predict(img, verbose=0)[0][0]
 
-                    if prediction >= 0.9:
+                    if prediction >= 0.5:
                         label = 'Spoof'
                         color = (0, 0, 255)  # Red for spoof
                         face_detected = False
@@ -535,7 +543,7 @@ def on_register():
 
 def reopen_camera():
     global cap
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(CAM_NUM)
 
 def show_loading_message():
     set_instruction_text("Processing... Please wait.")
@@ -695,7 +703,7 @@ frame_right.pack(side="right", fill="both", expand=True)
 label_video = tk.Label(frame_left, bg=bg_color)
 label_video.pack(padx=10, pady=10)
 
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(CAM_NUM)
 
 instruction_text = tk.Label(frame_right, font=instruction_font, bg=bg_color, fg=text_color)
 instruction_text.pack(pady=10)
